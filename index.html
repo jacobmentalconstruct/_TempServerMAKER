@@ -1,0 +1,327 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Consolidated Index of _TempServerMAKER</title>
+
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; line-height: 1.6; margin: 0; background-color: #f8f9fa; }
+            .container { max-width: 1200px; margin: 0 auto; padding: 2em; }
+            .header { background-color: #343a40; color: white; padding: 2em; text-align: center; border-radius: 8px; margin-bottom: 2em; }
+            .toc { background-color: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5em; margin-bottom: 2em; }
+            .toc ul { padding-left: 20px; columns: 3; -webkit-columns: 3; -moz-columns: 3; }
+            .file-section { background-color: #fff; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 1em; }
+            .file-title { font-size: 1.2em; font-weight: 600; padding: 0.8em 1.2em; background-color: #f1f3f5; border-bottom: 1px solid #dee2e6; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+            .file-title::after { content: '▼'; font-size: 0.8em; }
+            .file-content { display: none; padding: 1.5em; max-height: 500px; overflow: auto; }
+            .file-content pre { margin: 0; background-color: #e9ecef; padding: 1em; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; }
+            .active .file-content { display: block; }
+            .active .file-title::after { content: '▲'; }
+        </style></head><body>
+<div class='container'>
+<div class='header'><h1>Consolidated Files for Project: _TempServerMAKER</h1></div>
+<div class='toc'><h2>Table of Contents</h2><ul>
+<li><a href='#_TempServerMAKER.py'>_TempServerMAKER.py</a></li>
+</ul></div>
+<div class='file-section' id='_TempServerMAKER.py'>
+<h2 class='file-title'>_TempServerMAKER.py</h2>
+<div class='file-content'><pre><code># local_server_for_scraper.py
+#
+# Version 7.1 (Community Edition - Hardened)
+# - Fixed cross-platform bug causing &quot;I/O operation on closed file&quot; error by
+#   removing global os.chdir and passing the directory to the handler directly.
+# - Robust threading model to prevent UI blocking during file processing.
+# - Graceful shutdown on Ctrl+C across Windows, macOS, and Linux.
+# - Enhanced HTML markup with a navigable Table of Contents and collapsible sections.
+# - Dynamic in-terminal progress bar for better user feedback during indexing.
+
+import argparse
+import http.server
+import socketserver
+import os
+import webbrowser
+import fnmatch
+import html
+import sys
+import time
+import threading
+import functools # &lt;--- 1. IMPORTED FUNCTOOLS
+from pathlib import Path
+from typing import Set, Optional
+
+# --- Configuration (remains the same) ---
+TEXT_FILE_EXTENSIONS = {
+    &#x27;.txt&#x27;, &#x27;.md&#x27;, &#x27;.markdown&#x27;, &#x27;.rst&#x27;, &#x27;.py&#x27;, &#x27;.js&#x27;, &#x27;.ts&#x27;, &#x27;.html&#x27;, &#x27;.css&#x27;,
+    &#x27;.scss&#x27;, &#x27;.json&#x27;, &#x27;.xml&#x27;, &#x27;.yaml&#x27;, &#x27;.yml&#x27;, &#x27;.ini&#x27;, &#x27;.toml&#x27;, &#x27;.cfg&#x27;, &#x27;.env&#x27;,
+    &#x27;.sh&#x27;, &#x27;.bat&#x27;, &#x27;.ps1&#x27;, &#x27;.sql&#x27;, &#x27;.java&#x27;, &#x27;.c&#x27;, &#x27;.cpp&#x27;, &#x27;.h&#x27;, &#x27;.hpp&#x27;, &#x27;.cs&#x27;,
+    &#x27;.go&#x27;, &#x27;.rb&#x27;, &#x27;.php&#x27;, &#x27;.rs&#x27;, &#x27;.swift&#x27;, &#x27;.kt&#x27;, &#x27;.kts&#x27;, &#x27;.scala&#x27;, &#x27;.pl&#x27;,
+    &#x27;.pm&#x27;, &#x27;.t&#x27;, &#x27;.r&#x27;, &#x27;.dockerfile&#x27;, &#x27;dockerfile&#x27;, &#x27;.gitignore&#x27;
+}
+
+DEFAULT_IGNORE_DIRS = {
+    &#x27;.git&#x27;, &#x27;node_modules&#x27;, &#x27;venv&#x27;, &#x27;.venv&#x27;, &#x27;env&#x27;, &#x27;.env&#x27;, &#x27;build&#x27;, &#x27;dist&#x27;,
+    &#x27;target&#x27;, &#x27;__pycache__&#x27;, &#x27;.pytest_cache&#x27;, &#x27;.mypy_cache&#x27;, &#x27;.tox&#x27;, &#x27;.idea&#x27;,
+    &#x27;.vscode&#x27;
+}
+
+# --- Server Threading ---
+class ServerThread(threading.Thread):
+    &quot;&quot;&quot;A thread that runs the HTTP server and can be stopped gracefully.&quot;&quot;&quot;
+    def __init__(self, directory: Path, port: int):
+        super().__init__()
+        self.daemon = True
+        self.port = port
+        self.directory = directory
+        self._server = None
+        self._server_started = threading.Event()
+
+    def run(self):
+        &quot;&quot;&quot;The core of the server thread. This is the updated section.&quot;&quot;&quot;
+        # --- 2. THE FIX ---
+        # Instead of changing the global directory, we tell the handler
+        # which directory to serve directly. This is much safer.
+        Handler = functools.partial(
+            http.server.SimpleHTTPRequestHandler,
+            directory=str(self.directory)
+        )
+        # -----------------
+
+        try:
+            self._server = socketserver.TCPServer((&quot;&quot;, self.port), Handler)
+            self._server_started.set() # Signal that the server object is created
+            self._server.serve_forever(poll_interval=0.5)
+        except Exception as e:
+            print(f&quot;\n[Error] Could not start server: {e}&quot;, file=sys.stderr)
+            self._server_started.set()
+
+    def start_and_wait(self):
+        &quot;&quot;&quot;Starts the thread and waits until the server is initialized.&quot;&quot;&quot;
+        self.start()
+        self._server_started.wait()
+        if not self._server:
+             raise ConnectionError(&quot;Server failed to initialize.&quot;)
+
+    def stop(self):
+        &quot;&quot;&quot;Stops the running server.&quot;&quot;&quot;
+        if self._server:
+            self._server.shutdown()
+            self._server.server_close()
+
+# --- Core Logic (remains the same) ---
+def is_port_in_use(port: int) -&gt; bool:
+    &quot;&quot;&quot;Checks if a TCP port is already in use.&quot;&quot;&quot;
+    with socketserver.socket.socket(socketserver.socket.AF_INET, socketserver.socket.SOCK_STREAM) as s:
+        return s.connect_ex((&#x27;127.0.0.1&#x27;, port)) == 0
+
+def is_text_file(p: Path) -&gt; bool:
+    &quot;&quot;&quot;Checks if a file is likely a text file based on its extension.&quot;&quot;&quot;
+    if p.name.startswith(&#x27;.&#x27;) and not p.suffix:
+        return False
+    return p.suffix.lower() in TEXT_FILE_EXTENSIONS
+
+def load_gitignore_patterns(root_path: Path) -&gt; Set[str]:
+    &quot;&quot;&quot;Finds and parses a .gitignore file, returning a set of ignore patterns.&quot;&quot;&quot;
+    gitignore_path = root_path / &#x27;.gitignore&#x27;
+    patterns = set()
+    if gitignore_path.is_file():
+        try:
+            with gitignore_path.open(&#x27;r&#x27;, encoding=&#x27;utf-8&#x27;, errors=&#x27;ignore&#x27;) as f:
+                for line in f:
+                    stripped_line = line.strip()
+                    if stripped_line and not stripped_line.startswith(&#x27;#&#x27;):
+                        patterns.add(stripped_line)
+        except Exception as e:
+            print(f&quot;\nWarning: Could not read .gitignore file. Error: {e}&quot;)
+    return patterns
+
+def create_monolithic_html_file(root_path: Path, ignore_patterns: Set[str]) -&gt; tuple[Path, int]:
+    &quot;&quot;&quot;Generates a single HTML file containing the content of all relevant files.&quot;&quot;&quot;
+    index_filepath = root_path / &quot;index.html&quot;
+    files_to_process = []
+
+    # First, walk the directory to gather a list of files to process
+    for dirpath, dirnames, filenames in os.walk(root_path, topdown=True):
+        current_dir = Path(dirpath)
+        dirs_to_exclude = DEFAULT_IGNORE_DIRS.copy()
+        for pattern in ignore_patterns:
+            dirs_to_exclude.update(fnmatch.filter(dirnames, pattern))
+        dirnames[:] = [d for d in dirnames if d not in dirs_to_exclude]
+
+        for filename in filenames:
+            file_path = current_dir / filename
+            is_ignored_by_pattern = any(fnmatch.fnmatch(str(file_path.relative_to(root_path)), p) for p in ignore_patterns)
+            if is_text_file(file_path) and file_path != index_filepath and not is_ignored_by_pattern:
+                files_to_process.append(file_path)
+    
+    # Now, process the files and write the HTML
+    total_files = len(files_to_process)
+    files_processed_count = 0
+    
+    with index_filepath.open(&quot;w&quot;, encoding=&quot;utf-8&quot;) as f:
+        # --- HTML Header and Enhanced Styling ---
+        f.write(&#x27;&lt;!DOCTYPE html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;meta charset=&quot;UTF-8&quot;&gt;\n&#x27;)
+        f.write(f&#x27;&lt;title&gt;Consolidated Index of {root_path.name}&lt;/title&gt;\n&#x27;)
+        f.write(&quot;&quot;&quot;
+        &lt;style&gt;
+            body { font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, Oxygen-Sans, Ubuntu, Cantarell, &quot;Helvetica Neue&quot;, sans-serif; line-height: 1.6; margin: 0; background-color: #f8f9fa; }
+            .container { max-width: 1200px; margin: 0 auto; padding: 2em; }
+            .header { background-color: #343a40; color: white; padding: 2em; text-align: center; border-radius: 8px; margin-bottom: 2em; }
+            .toc { background-color: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 1.5em; margin-bottom: 2em; }
+            .toc ul { padding-left: 20px; columns: 3; -webkit-columns: 3; -moz-columns: 3; }
+            .file-section { background-color: #fff; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 1em; }
+            .file-title { font-size: 1.2em; font-weight: 600; padding: 0.8em 1.2em; background-color: #f1f3f5; border-bottom: 1px solid #dee2e6; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+            .file-title::after { content: &#x27;▼&#x27;; font-size: 0.8em; }
+            .file-content { display: none; padding: 1.5em; max-height: 500px; overflow: auto; }
+            .file-content pre { margin: 0; background-color: #e9ecef; padding: 1em; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; }
+            .active .file-content { display: block; }
+            .active .file-title::after { content: &#x27;▲&#x27;; }
+        &lt;/style&gt;&quot;&quot;&quot;)
+        f.write(&quot;&lt;/head&gt;&lt;body&gt;\n&lt;div class=&#x27;container&#x27;&gt;\n&quot;)
+        f.write(f&quot;&lt;div class=&#x27;header&#x27;&gt;&lt;h1&gt;Consolidated Files for Project: {html.escape(root_path.name)}&lt;/h1&gt;&lt;/div&gt;\n&quot;)
+
+        # --- Table of Contents ---
+        f.write(&quot;&lt;div class=&#x27;toc&#x27;&gt;&lt;h2&gt;Table of Contents&lt;/h2&gt;&lt;ul&gt;\n&quot;)
+        for file_path in sorted(files_to_process):
+            relative_path = file_path.relative_to(root_path)
+            f.write(f&quot;&lt;li&gt;&lt;a href=&#x27;#{html.escape(str(relative_path))}&#x27;&gt;{html.escape(str(relative_path))}&lt;/a&gt;&lt;/li&gt;\n&quot;)
+        f.write(&quot;&lt;/ul&gt;&lt;/div&gt;\n&quot;)
+
+        # --- File Contents ---
+        for file_path in sorted(files_to_process):
+            relative_path = file_path.relative_to(root_path)
+            
+            f.write(f&quot;&lt;div class=&#x27;file-section&#x27; id=&#x27;{html.escape(str(relative_path))}&#x27;&gt;\n&quot;)
+            f.write(f&quot;&lt;h2 class=&#x27;file-title&#x27;&gt;{html.escape(str(relative_path))}&lt;/h2&gt;\n&quot;)
+            f.write(&quot;&lt;div class=&#x27;file-content&#x27;&gt;&lt;pre&gt;&lt;code&gt;&quot;)
+            
+            try:
+                content = file_path.read_text(encoding=&#x27;utf-8&#x27;, errors=&#x27;ignore&#x27;)
+                f.write(html.escape(content))
+            except Exception as e:
+                f.write(f&quot;Could not read file. Error: {e}&quot;)
+            
+            f.write(&quot;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;\n&lt;/div&gt;\n&quot;)
+            files_processed_count += 1
+            # --- Progress Bar ---
+            progress = int((files_processed_count / total_files) * 50)
+            sys.stdout.write(f&quot;\r  Indexing: [{&#x27;#&#x27; * progress}{&#x27;-&#x27; * (50 - progress)}] {files_processed_count}/{total_files} files&quot;)
+            sys.stdout.flush()
+
+        # **** THE FIX IS HERE ****
+        # These lines are now INDENTED to be inside the &#x27;with&#x27; block
+        f.write(&quot;&quot;&quot;
+            &lt;script&gt;
+                document.querySelectorAll(&#x27;.file-title&#x27;).forEach(title =&gt; {
+                    title.addEventListener(&#x27;click&#x27;, () =&gt; {
+                        title.parentElement.classList.toggle(&#x27;active&#x27;);
+                    });
+                });
+            &lt;/script&gt;
+        &quot;&quot;&quot;)
+        f.write(&quot;&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;&quot;)
+    
+    # This line now correctly happens after the file is closed.
+    sys.stdout.write(&quot;\n&quot;) 
+    return index_filepath, files_processed_count
+    
+def select_directory_gui() -&gt; Optional[Path]:
+    &quot;&quot;&quot;Shows a GUI folder selection dialog.&quot;&quot;&quot;
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except ImportError:
+        print(&quot;\n[Warning] tkinter not found. For GUI folder selection, please install it.&quot;, file=sys.stderr)
+        print(&quot;  On Debian/Ubuntu: sudo apt-get install python3-tk&quot;, file=sys.stderr)
+        print(&quot;  Please specify a directory using the -d flag instead.&quot;, file=sys.stderr)
+        return None
+
+    print(&quot;No directory specified. Opening folder selection dialog...&quot;)
+    root = tk.Tk()
+    root.withdraw()
+    selected_path_str = filedialog.askdirectory(title=&quot;Select Project Folder to Serve&quot;)
+    return Path(selected_path_str) if selected_path_str else None
+# --- Main Execution (Version 7.2 - Sequential Logic) ---
+def main():
+    parser = argparse.ArgumentParser(
+        description=&quot;Serve a local project directory as a single HTML file for scraping.&quot;,
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument(&#x27;-d&#x27;, &#x27;--directory&#x27;, type=Path, help=&quot;Project directory to serve.\nIf not provided, a GUI dialog will open.&quot;)
+    parser.add_argument(&#x27;-p&#x27;, &#x27;--port&#x27;, type=int, default=8000, help=&quot;Port to run the server on (default: 8000).&quot;)
+    parser.add_argument(&#x27;--keep-file&#x27;, action=&#x27;store_true&#x27;, help=&quot;Do not delete the generated index.html on exit.&quot;)
+    parser.add_argument(&#x27;--no-browser&#x27;, action=&#x27;store_true&#x27;, help=&quot;Do not automatically open a web browser.&quot;)
+    args = parser.parse_args()
+
+    # --- Step 1: Select Directory ---
+    selected_path = args.directory
+    if not selected_path:
+        selected_path = select_directory_gui()
+
+    if not selected_path or not selected_path.is_dir():
+        print(&quot;No valid directory selected. Exiting.&quot;, file=sys.stderr)
+        sys.exit(1)
+    
+    selected_path = selected_path.resolve()
+    print(f&quot;\nProject folder: {selected_path}&quot;)
+
+    # --- Step 2: Generate the HTML file FIRST ---
+    print(&quot;\nStarting file indexing process...&quot;)
+    ignore_patterns = load_gitignore_patterns(selected_path)
+    index_filepath, file_count = create_monolithic_html_file(selected_path, ignore_patterns)
+    print(f&quot;Successfully indexed {file_count} files.&quot;)
+
+    # --- Step 3: Check port and start the server ONLY AFTER file is ready ---
+    if is_port_in_use(args.port):
+        print(f&quot;\n[Error] Port {args.port} is already in use.&quot;, file=sys.stderr)
+        print(&quot;Please choose a different port using the -p flag (e.g., -p 8001).&quot;, file=sys.stderr)
+        sys.exit(1)
+
+    server_thread = None
+    try:
+        server_thread = ServerThread(selected_path, args.port)
+        server_thread.start_and_wait()
+        server_url = f&quot;http://127.0.0.1:{args.port}/&quot;
+
+        print(&quot;\n&quot; + &quot;=&quot;*50)
+        print(&quot;  SERVER IS RUNNING! ✅&quot;)
+        print(&quot;=&quot;*50)
+        print(f&quot;  URL: {server_url}&quot;)
+        print(&quot;Your project is now ready for scraping.&quot;)
+        print(&quot;\nTo stop the server, press Ctrl+C in this terminal.&quot;)
+
+        if not args.no_browser:
+            webbrowser.open_new_tab(server_url)
+
+        # Keep the main thread alive to handle KeyboardInterrupt
+        while True:
+            time.sleep(1)
+
+    except (KeyboardInterrupt, SystemExit):
+        print(&quot;\n\n[Info] Shutdown signal received. Cleaning up...&quot;)
+    except Exception as e:
+        print(f&quot;\n[Error] An unexpected error occurred: {e}&quot;, file=sys.stderr)
+    finally:
+        if server_thread and server_thread.is_alive():
+            server_thread.stop()
+            server_thread.join()
+        
+        if index_filepath and index_filepath.exists():
+            if args.keep_file:
+                print(f&quot;[Info] Kept generated file at: {index_filepath}&quot;)
+            else:
+                try:
+                    print(&quot;[Info] Removing temporary index file...&quot;)
+                    index_filepath.unlink()
+                except Exception as e:
+                    print(f&quot;[Error] Could not remove index file: {e}&quot;, file=sys.stderr)
+        
+        print(&quot;Goodbye! 👋&quot;)
+if __name__ == &quot;__main__&quot;:
+    main()</code></pre></div>
+</div>
+
+            <script>
+                document.querySelectorAll('.file-title').forEach(title => {
+                    title.addEventListener('click', () => {
+                        title.parentElement.classList.toggle('active');
+                    });
+                });
+            </script>
+        </div></body></html>
