@@ -1,0 +1,9 @@
+name: temp_server_maker-env
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - black
+      - ruff

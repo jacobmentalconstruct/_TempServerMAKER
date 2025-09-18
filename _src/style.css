@@ -1,0 +1,153 @@
+:root {
+  --bg: #0b0d10;
+  --panel: #12161b;
+  --muted: #8aa0b5;
+  --text: #e8eef5;
+  --accent: #6cb2ff;
+  --border: #233241;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, Segoe UI, Roboto, Arial;
+}
+
+.header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header .title {
+  font-weight: 600;
+}
+
+.header .spacer {
+  flex: 1;
+}
+
+.btn {
+  background: #18212a;
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: calc(100vh - 48px);
+}
+
+.sidebar {
+  border-right: 1px solid var(--border);
+  background: #0f141a;
+  padding: 10px;
+  overflow: auto;
+}
+
+.content {
+  padding: 12px;
+  overflow: auto;
+}
+
+.tree ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 14px;
+}
+
+.tree li {
+  margin: 2px 0;
+}
+
+.tree .folder {
+  cursor: pointer;
+}
+
+.tree .folder::before {
+  content: '▸ ';
+  color: var(--muted);
+}
+
+.tree .folder.open::before {
+  content: '▾ ';
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  margin: 0 0 12px;
+}
+
+.card h3 {
+  margin: 0;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.card .body {
+  padding: 10px;
+}
+
+.meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: var(--muted);
+}
+
+details > summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: #0b1117;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.search {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0b1117;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+
